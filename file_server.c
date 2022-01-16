@@ -9,7 +9,15 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-#include "commandManagement.h"
+#include "fileManagement.h"
+
+// DEBUG Macro
+//#define DEBUG
+#ifdef DEBUG
+#define D(x) x
+#else
+#define D(x)
+#endif
 
 /*
     compile using:
@@ -29,16 +37,16 @@ pthread_mutex_t emptyTxtLock;
 int main(int argc, char *argv[]){
     // time based seed for randomization
     srand(time(NULL));
-
-    // initialize locks for read.txt and write.txt
+    
+    D(printf("[PID: %d]\tMain thread starts.\n", getpid());)
+    
+    // initialize locks for updating read.txt and write.txt
     // command.txt is only accessed by a main thread so no need to lock it
     pthread_mutex_init(&readTxtLock, NULL);
     pthread_mutex_init(&emptyTxtLock, NULL);
 
-    // performs similar to a shell
     // loops repeatedly for console input
     // every input forks a master thread, which then spawns appropriate worker threads
-
     while (1){
         // gets input from console and stores information in a Command struct
         struct Command command;
@@ -60,7 +68,7 @@ int main(int argc, char *argv[]){
             break;
         } else{
             // parent reaps child then repeats while loop
-            wait(NULL);
+            waitpid(pid,NULL,WNOHANG);
         }
     }
     return 0;
@@ -154,31 +162,78 @@ void msSleep(int ms){
     select (0, NULL, NULL, NULL, &t);
 }
 
+// returns current time in milliseconds
+long long getMsTime() {
+    struct timeval t;
+    gettimeofday(&t,NULL);
+    return (((long long)t.tv_sec)*1000)+(t.tv_usec/1000);
+}
+/*    long long start, lap;
+    start = getMsTime();
+    msSleep(201);
+    lap = getMsTime();
+
+    D(printf("ms taken: %lld\n",lap-start);)
+*/
+
 //  worker thread for write command
 void executeWrite(struct Command * command){    
-    
+
+#   ifdef DEBUG
+    long long start, lap;
+    printf("[PID: %d]\tWrite worker thread created.\n", getpid());
+    start = getMsTime();
+#   endif
+
     // "loading" duration, 80% 1s, 20% 6s
     int waitTime = (rand()%10<8) ? 1 : 6;
     sleep(waitTime);
+
+#   ifdef DEBUG
+    lap = getMsTime();
+    printf("[PID: %d]\tFile Load Duration:\t%llds\n", getpid(), (lap-start)/1000);
+    start = getMsTime();
+#   endif
 
     // buffer that stores the characters to write
     char buffer[2] = "\0\0";
 
     // append stored character to path for every 25ms
-    for(int i=0; command->str[i]!='\0';i++){
+    int i;
+    for(i=0; command->str[i]!='\0';i++){
         msSleep(250);
         buffer[0]=command->str[i];
         appendOnFile(command->path, buffer);
     }
+
+#   ifdef DEBUG
+    lap = getMsTime();
+    printf("[PID: %d]\tExpected Write Duration:\t%dms\n", getpid(), i*250);
+    printf("[PID: %d]\tActual Write Duration:\t\t%lldms\n", getpid(), lap-start);
+    printf("[PID: %d]\tWrite worker thread closes.\n", getpid());
+#   endif
+
 }
 
 // worker thread for read command
 void executeRead(struct Command * command){     
     
+#   ifdef DEBUG
+    long long start, lap;
+    printf("[PID: %d]\tRead worker thread created.\n", getpid());
+    start = getMsTime();
+#   endif
+
     // "loading" duration, 80% 1s, 20% 6s
     int waitTime = (rand()%10<8) ? 1 : 6;
     sleep(waitTime);
     
+#   ifdef DEBUG
+    lap = getMsTime();
+    printf("[PID: %d]\tFile Load Duration:\t%llds\n", getpid(), (lap-start)/1000);
+    start = getMsTime();
+#   endif
+
     // print "<entire command>:" in read.txt
     char dest[MAX_INPUT_SIZE];
     copyCommand(dest,command);
@@ -216,15 +271,34 @@ void executeRead(struct Command * command){
     // unlock read.txt
     pthread_mutex_unlock(&readTxtLock);
 
+#   ifdef DEBUG
+    lap = getMsTime();
+    printf("[PID: %d]\tExpected Read Duration:\t0ms\n", getpid());
+    printf("[PID: %d]\tActual Read Duration:\t\t%lldms\n", getpid(), lap-start);
+    printf("[PID: %d]\tRead worker thread closes.\n", getpid());
+#   endif
+
     return;
 }
 
 // worker thread for empty command
 void executeEmpty(struct Command * command){     
     
+#   ifdef DEBUG
+    long long start, lap;
+    printf("[PID: %d]\tEmpty worker thread created.\n", getpid());
+    start = getMsTime();
+#   endif
+
     // "loading" duration, 80% 1s, 20% 6s
     int waitTime = (rand()%10<8) ? 1 : 6;
     sleep(waitTime);
+    
+#   ifdef DEBUG
+    lap = getMsTime();
+    printf("[PID: %d]\tFile Load Duration:\t%llds\n", getpid(), (lap-start)/1000);
+    start = getMsTime();
+#   endif
 
     // lock empty.txt
     pthread_mutex_lock(&emptyTxtLock);
@@ -243,6 +317,12 @@ void executeEmpty(struct Command * command){
     if (fp == NULL){
         appendOnFile("empty.txt","FILE ALREADY EMPTY\n"); 
         fclose(fp); 
+
+#       ifdef DEBUG
+        lap = getMsTime();
+        printf("[PID: %d]File already empty.\n", getpid());
+#       endif
+
     } else{      
         // buffer that stores BUFFER_SIZE characters
         char buffer[BUFFER_SIZE+1] = {0}; int num_read;
@@ -251,6 +331,7 @@ void executeEmpty(struct Command * command){
         while((num_read=fread(buffer,1,BUFFER_SIZE,fp))==BUFFER_SIZE){
             appendOnFile("empty.txt", buffer);
         }
+
         // null terminate the end of file before appending to empty.txt
         buffer[num_read]='\0';
         appendOnFile("empty.txt", buffer);
@@ -260,35 +341,54 @@ void executeEmpty(struct Command * command){
         // "emptying" duration, between 7 and 10 whole seconds
         waitTime = (rand()%4)+7;
         sleep(waitTime);
-        
+
         // overwriting the file with an empty file
         fp = fopen(command->path,"w");
         fclose(fp);
+
+#       ifdef DEBUG
+        lap = getMsTime();
+        printf("[PID: %d]\tFile emptying duration:\t%llds\n", getpid(),(lap-start)/1000);
+#       endif
+
     }
     // unlock empty.txt
     pthread_mutex_unlock(&emptyTxtLock);
+
+#   ifdef DEBUG
+    printf("[PID: %d]\tEmpty worker thread closes.\n", getpid());
+#   endif
+
     return;
 }
 
 // spawns the worker threads, called by the master thread which is the forked child in main
 // uses switch-case on the stored command, then creates respective worker thread
 void executeCommand(struct Command * command){      
+
+    D(printf("[PID: %d]\tMaster thread forked from main.\n", getpid());)
+
     pthread_t worker;
     switch (command->action){
         case 'w':
+            D(printf("[PID: %d]\tMaster thread spawns a write thread.\n", getpid());)
             pthread_create(&worker, NULL, (void *) executeWrite, command);
             pthread_join(worker, NULL);
             break;
         case 'r':
+            D(printf("[PID: %d]\tMaster thread spawns a read thread.\n", getpid());)
             pthread_create(&worker, NULL, (void *) executeRead, command);
             pthread_join(worker, NULL);
             break;
         case 'e':
+            D(printf("[PID: %d]\tMaster thread spawns an empty thread.\n", getpid());)
             pthread_create(&worker, NULL, (void *) executeEmpty, command);
             pthread_join(worker, NULL);
             break;
         default: break;
     }
+    
+    D(printf("[PID: %d]\tMaster thread closes.\n", getpid());)
 }
 
 
