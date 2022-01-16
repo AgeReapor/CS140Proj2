@@ -31,6 +31,12 @@ executable: ./file_server
 	- Initially an empty file.
 	- Is updated for every empty command accepted by the file server.
 
+6. test.txt (Optional)
+	- A text file with the command inputs used for testing the file server. 
+
+7. test (Optional)
+	- A directory used by test.txt inputs.
+
 === How To Use ===
 1. Start by "./file_server" in the repository directory.
 2. The console now endlessly accepts inputted commands separated by line breaks. The inputs are expected to be in the following formatting:
