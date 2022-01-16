@@ -1,0 +1,23 @@
+===Write Testing===
+write text1.txt a
+write text1.txt Supercalifragilisticexpialidocious
+write test/text2.txt 12345678901234567890123456789012345678901234567890
+
+===Read Testing===
+read text1.txt
+read test/text2.txt
+
+===Empty Testing===
+empty text1.txt
+empty test/text2.txt
+
+Tip: To check thread concurrency, uncomment file_server.c's line 15 to show live logs of the server.
+
+===Concurrency Testing===
+empty text1.txt
+empty text2.txt
+read test/text1.txt
+read test/text2.txt
+write test/text3.txt Antidisestablishmentarianism
+write test/text4.txt Pneumonoultramicroscopicsilicovolcanoconiosis
+
